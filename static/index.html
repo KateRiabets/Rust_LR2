@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+        .calculator {
+            display: grid;
+            grid-template-columns: repeat(4, 100px);
+            grid-gap: 10px;
+            padding: 20px;
+            border-radius: 10px;
+            background-color: #fff;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        .calculator input {
+            grid-column: span 4;
+            height: 50px;
+            font-size: 24px;
+            text-align: right;
+            padding: 10px;
+        }
+        .calculator button {
+            font-size: 24px;
+            padding: 20px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            transition: background-color 0.3s ease;
+        }
+        .calculator button:active {
+            background-color: #ddd;
+        }
+        .calculator button.operator {
+            background-color: pink;
+            color: white;
+        }
+        .error-message {
+            grid-column: span 4;
+            color: red;
+            font-size: 18px;
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="calculator">
+    <input type="text" id="display" disabled>
+    <button>7</button>
+    <button>8</button>
+    <button>9</button>
+    <button class="operator">/</button>
+    <button>4</button>
+    <button>5</button>
+    <button>6</button>
+    <button class="operator">*</button>
+    <button>1</button>
+    <button>2</button>
+    <button>3</button>
+    <button class="operator">-</button>
+    <button>0</button>
+    <button>.</button>
+    <button class="operator">=</button>
+    <button class="operator">+</button>
+    <button id="negate">±</button>
+    <button id="clear">C</button>
+    <div id="error-message" class="error-message"></div>
+</div>
+
+<script>
+    let currentInput = ''; // Поточне введення (число)
+    let operator = ''; // Поточний оператор
+    let result = ''; // Результат попередньої операції (якщо був)
+    let errorMessage = ''; // Повідомлення про помилку (якщо є)
+
+    // Отриманння елементів для відображення
+    const display = document.getElementById('display'); // Поле для поточного виразу
+    const errorDisplay = document.getElementById('error-message'); // Поле для повідомлень про помилки
+    const buttons = document.querySelectorAll('.calculator button'); // Кнопки
+
+    // Очистка всіх полів
+    function clearAll() {
+        currentInput = '';
+        operator = '';
+        result = '';
+        errorMessage = '';
+        display.value = '';
+        errorDisplay.textContent = '';
+    }
+
+    // Для унарного мінуса
+    function toggleNegate() {
+        if (currentInput.startsWith('-')) { // Якщо поточний ввід числа починається з мінуса
+            currentInput = currentInput.slice(1); // Прибрати мінус
+        } else {
+            currentInput = '-' + currentInput;  // Додати мінус
+        }
+        display.value = result + operator + currentInput; // Оновленння відображення
+    }
+
+    // Обробник подій для кнопок
+    buttons.forEach(button => {
+        button.addEventListener('click', () => {
+            const value = button.textContent; // Отримання тексту натиснутої кнопки
+
+            if (value === 'C') {
+                clearAll(); // Якщо натиснуто "C", очистка полів
+            } else if (!isNaN(value) || value === '.') {  // Якщо введена цифра або крапка
+                errorDisplay.textContent = ''; // Видалення повідомлення про помилку при новому вводі
+                currentInput += value; // Додавання цифри до поточного вводу
+                display.value = result + operator + currentInput; // Оновлення поля з першим операндом, оператором і поточним введенням
+            } else if (value === '=') {
+                // Відправка запиту на обчислення, якщо є введені дані
+                if (currentInput && operator) {
+                    fetch(`/calculate?expression=${encodeURIComponent(result + operator + currentInput)}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                clearAll();
+                                errorDisplay.textContent = data.error;
+                            } else {
+                                display.value = '=' + data.result;
+                                result = data.result; // Збереження результату для подальших операцій
+                                currentInput = '';
+                                operator = '';
+                                errorMessage = '';
+                            }
+                        })
+                        .catch(error => {
+                            clearAll();
+                            errorDisplay.textContent = 'Помилка сервера';
+                        });
+                }
+            } else if (value === '±') {   // Якщо натиснута кнопка зміни знака
+                toggleNegate();
+            } else { // Якщо натиснута кнопка оператора
+                if (currentInput !== '') { // Якщо є введене число і натиснута кнопка оператора
+                    if (result && operator) {
+                        // Якщо вже є результат і оператор, то виконуємо обчислення проміжного результату
+                        fetch(`/calculate?expression=${encodeURIComponent(result + operator + currentInput)}`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.error) {
+                                    clearAll();
+                                    errorDisplay.textContent = data.error;
+                                } else {
+                                    result = data.result; // Оновлення результату
+                                    currentInput = ''; // Очистка введеного числа
+                                    operator = value; // Установка нового оператора
+                                    display.value = result + operator; // Оновлення поля відображення
+                                }
+                            })
+                            .catch(error => {
+                                clearAll();
+                                errorDisplay.textContent = 'Помилка сервера';
+                            });
+                    } else {
+                        // Якщо результату ще немає,  збереження оператора і поточного введеного числа
+                        result = currentInput;
+                        operator = value;
+                        currentInput = ''; // Очистка введеного числа
+                        display.value = result + operator; // Оновлення поля відображення
+                    }
+                } else {
+                    // Якщо поточне введення порожнє, збереження оператора
+                    operator = value;
+                    display.value = result + operator;
+                }
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
